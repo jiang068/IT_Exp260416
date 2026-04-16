@@ -1,6 +1,7 @@
 temp/
 data/
 models/
+cp/GPTzip/
 
 # Python
 __pycache__/
