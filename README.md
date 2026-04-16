@@ -4,12 +4,15 @@ uv venv --python 3.12
 uv pip install -r requirements.txt -i https://mirrors.ustc.edu.cn/pypi/simple
 ```
 
-Download dataset:  
+Exp1 run:  
 ```bash
-uv run tools/download.py
+uv run tools/download.py  # to download dataset
+uv run exp1/main.py
 ```
 
-Exp run:  
+Exp2 run:
 ```bash
-uv run exp1/main.py
+uv run pytorchsetup.py  # to setup pytorch env
+uv run GPTzip.py  # run GPTzip
+
 ```
