@@ -3,9 +3,9 @@ import time
 import pandas as pd
 
 class ExperimentLogger:
-    def __init__(self, log_dir="exp1/logs"):
-        self.log_dir = log_dir
-        os.makedirs(self.log_dir, exist_ok=True)
+    def __init__(self, out_dir="outputs"): 
+        self.out_dir = out_dir
+        os.makedirs(self.out_dir, exist_ok=True)
         self.results = []
 
     def record_and_verify(self, method_name, slice_name, raw_path, compress_func, decompress_func):
@@ -52,7 +52,7 @@ class ExperimentLogger:
 
     def save_to_csv(self, filename="results.csv"):
         df = pd.DataFrame(self.results)
-        save_path = os.path.join(self.log_dir, filename)
+        save_path = os.path.join(self.out_dir, filename)
         df.to_csv(save_path, index=False, encoding='utf-8-sig')
         print(f"\n[Record] 实验结果已保存至: {save_path}")
         return df

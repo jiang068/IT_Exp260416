@@ -1,6 +1,6 @@
 import os
 
-def slice_dataset(input_file="data/enwik8", out_dir="data"):
+def slice_dataset(input_file, out_dir="data"):
     sizes = {
         "1KB": 1024,
         "10KB": 10240,
@@ -25,6 +25,3 @@ def slice_dataset(input_file="data/enwik8", out_dir="data"):
             slices_paths[name] = out_path
             
     return slices_paths
-
-if __name__ == "__main__":
-    slice_dataset()
