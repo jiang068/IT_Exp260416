@@ -6,14 +6,16 @@ import sys
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 # 项目根目录: 退一层 (exp1 -> IT_Exp260416)
 ROOT_DIR = os.path.dirname(CURRENT_DIR)
-# 将项目根目录加入环境变量，以便找到 tools 和 cp
+# 将项目根目录加入环境变量，以便找到 tools
 sys.path.append(ROOT_DIR)
 
 from tools.divide import slice_dataset
 from tools.record import ExperimentLogger
 from tools.draw import plot_results
 from tools.logger import setup_console_logger
-from cp.legency import TRADITIONAL_COMPRESSORS
+
+# 【修改这里】：因为 legency.py 现在和 main.py 在同一个目录下，直接导入即可
+from legency import TRADITIONAL_COMPRESSORS
 
 def run_experiment_1():
     # 日志和输出目录内聚到 exp1 目录下

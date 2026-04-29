@@ -1,7 +1,5 @@
 temp/
 data/
-models/
-cp/GPTzip/
 
 # Python
 __pycache__/
@@ -23,3 +21,9 @@ venv/
 # OS
 .DS_Store
 Thumbs.db
+
+# exp2
+# exp2/gptzip/GPTzip
+exp2/gptzip/GPTzip_gpt2
+exp2/gptzip/logs
+
