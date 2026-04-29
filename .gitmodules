@@ -1,0 +1,3 @@
+[submodule "exp2/gptzip/GPTzip"]
+	path = exp2/gptzip/GPTzip
+	url = https://github.com/jiang068/GPTzip.git
