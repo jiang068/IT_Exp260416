@@ -3,15 +3,20 @@ import sys
 import time
 import subprocess
 
-# 将项目根目录加入环境变量
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# === 动态路径寻址 ===
+# 当前脚本所在目录: exp2/gptzip
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+# 项目根目录: 退三层 (gptzip -> exp2 -> IT_Exp260416)
+ROOT_DIR = os.path.dirname(os.path.dirname(CURRENT_DIR))
+# 将项目根目录加入环境变量，以找到 tools 和 cp
+sys.path.append(ROOT_DIR)
 
 from tools.logger import setup_console_logger
 from tools.record import ExperimentLogger
 
 def ensure_gptzip_repo():
-    """确保 GPTzip 仓库已克隆到 cp/GPTzip 目录下"""
-    repo_path = os.path.join("cp", "GPTzip")
+    """确保 GPTzip 仓库已克隆到根目录的 cp/GPTzip 目录下"""
+    repo_path = os.path.join(ROOT_DIR, "cp", "GPTzip")
     script_path = os.path.join(repo_path, "gptzip.py")
     
     if not os.path.exists(repo_path):
@@ -22,14 +27,15 @@ def ensure_gptzip_repo():
         
     return script_path
 
-def ensure_model(model_dir="models"):
+def ensure_model():
     """使用国内魔搭社区(ModelScope)高速下载 GPT-2 到本地，突破 HF 限速"""
     try:
         from modelscope.hub.snapshot_download import snapshot_download
     except ImportError:
-        print("[错误] 未安装 modelscope，请先在根目录运行: uv run pytorchsetup.py")
+        print("[错误] 未安装 modelscope，请先在此环境运行 pytorchsetup.py")
         sys.exit(1)
 
+    model_dir = os.path.join(ROOT_DIR, "models")
     os.makedirs(model_dir, exist_ok=True)
     save_path = os.path.join(model_dir, "GPTzip_gpt2")
 
@@ -37,7 +43,6 @@ def ensure_model(model_dir="models"):
         print(f"[准备] GPT-2 模型已存在于 {save_path}，跳过下载。")
     else:
         print(f"[准备] 正在从 ModelScope 高速下载 gpt2 模型到 {save_path} ...")
-        # 【修改这里】：换成包含 PyTorch 权重的官方全量镜像库
         snapshot_download(model_id="AI-ModelScope/gpt2", local_dir=save_path)
         
     return save_path
@@ -80,7 +85,9 @@ def patch_script_inplace(script_path, model_path):
         print("[准备] 已修改 gptzip.py：本地模型路径 + 修复后缀漏洞 + 修复 Windows 换行符字节校验漏洞！")
 
 def run_gptzip():
-    setup_console_logger(log_dir="exp2/logs", prefix="exp2_gptzip")
+    # 日志输出到当前文件夹 (exp2/gptzip/logs)
+    log_dir = os.path.join(CURRENT_DIR, "logs")
+    setup_console_logger(log_dir=log_dir, prefix="gptzip")
 
     print("="*50)
     print("开始执行 实验二：GPTzip (GPT-2) 独立压缩测试 (纯本地模型版)")
@@ -91,13 +98,16 @@ def run_gptzip():
     model_path = ensure_model()
     patch_script_inplace(gptzip_script, model_path)
 
-    # 2. 准备输出目录和记录器
-    os.makedirs("exp2/outputs/temp", exist_ok=True)
-    logger = ExperimentLogger(out_dir="exp2/outputs")
+    # 2. 准备输出目录和记录器 (exp2/gptzip/outputs)
+    out_dir = os.path.join(CURRENT_DIR, "outputs")
+    temp_dir = os.path.join(out_dir, "temp")
+    os.makedirs(temp_dir, exist_ok=True)
+    logger = ExperimentLogger(out_dir=out_dir)
 
     # 3. 指定测试切片 (仅测试 1KB)
     slice_name = "1KB"
-    raw_path = "data/enwik8/enwik8_1KB.txt"
+    # 使用绝对路径去根目录找 data
+    raw_path = os.path.join(ROOT_DIR, "data", "enwik8", "enwik8_1KB.txt")
 
     if not os.path.exists(raw_path):
         print(f"[错误] 找不到输入文件 {raw_path}。请确保已运行 exp1。")
@@ -105,12 +115,23 @@ def run_gptzip():
 
     raw_size = os.path.getsize(raw_path)
     print(f"\n[测试切片]: {slice_name} ({raw_size} Bytes)")
-    print(f"  -> 正在启动纯本地模型推理 (CPU 模式下请耐心等待)...")
+    
+    # === 动态设备检测 ===
+    try:
+        import torch
+        if torch.cuda.is_available():
+            device_name = torch.cuda.get_device_name(0)
+            print(f"  -> 正在启动纯本地模型推理 (🔥 GPU 加速开启: {device_name}，由于串行解码限制，仍需等待数秒)...")
+        else:
+            print(f"  -> 正在启动纯本地模型推理 (🐢 CPU 模式，请耐心等待)...")
+    except ImportError:
+        print(f"  -> 正在启动纯本地模型推理 (未知设备)...")
+    # ==========================
 
-    comp_path = f"exp2/outputs/temp/{slice_name}_GPTzip.gpz"
-    decomp_path = f"exp2/outputs/temp/{slice_name}_GPTzip.dec.txt"
+    comp_path = os.path.join(temp_dir, f"{slice_name}_GPTzip.gpz")
+    decomp_path = os.path.join(temp_dir, f"{slice_name}_GPTzip.dec.txt")
 
-    # 4. 执行压缩 (按照原版只带 -z 和 -o)
+    # 4. 执行压缩
     start_t = time.perf_counter()
     comp_cmd = [sys.executable, gptzip_script, "-z", raw_path, "-o", comp_path]
     res_comp = subprocess.run(comp_cmd, capture_output=True, text=True)
@@ -122,7 +143,7 @@ def run_gptzip():
     comp_time = time.perf_counter() - start_t
     comp_size = os.path.getsize(comp_path)
 
-    # 5. 执行解压 (按照原版只带 -u 和 -o)
+    # 5. 执行解压
     start_t = time.perf_counter()
     decomp_cmd = [sys.executable, gptzip_script, "-u", comp_path, "-o", decomp_path]
     res_decomp = subprocess.run(decomp_cmd, capture_output=True, text=True)
@@ -157,9 +178,10 @@ def run_gptzip():
         "Lossless": is_lossless
     })
 
-    logger.save_to_csv("gptzip_results.csv")
+    csv_name = "gptzip_results.csv"
+    logger.save_to_csv(csv_name)
     print("\nGPTzip 实验执行完毕！")
-    print("- 数据结果已保存至: exp2/outputs/gptzip_results.csv")
+    print(f"- 数据结果已保存至: {os.path.join(out_dir, csv_name)}")
 
 if __name__ == "__main__":
     run_gptzip()

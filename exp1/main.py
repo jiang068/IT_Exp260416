@@ -1,10 +1,14 @@
 import os
 import sys
 
-# 将项目根目录加入环境变量
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# === 动态路径寻址 ===
+# 当前脚本所在目录: exp1
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+# 项目根目录: 退一层 (exp1 -> IT_Exp260416)
+ROOT_DIR = os.path.dirname(CURRENT_DIR)
+# 将项目根目录加入环境变量，以便找到 tools 和 cp
+sys.path.append(ROOT_DIR)
 
-from tools.download import download_enwik8
 from tools.divide import slice_dataset
 from tools.record import ExperimentLogger
 from tools.draw import plot_results
@@ -12,21 +16,31 @@ from tools.logger import setup_console_logger
 from cp.legency import TRADITIONAL_COMPRESSORS
 
 def run_experiment_1():
-    setup_console_logger(log_dir="exp1/logs", prefix="exp1")
+    # 日志和输出目录内聚到 exp1 目录下
+    log_dir = os.path.join(CURRENT_DIR, "logs")
+    out_dir = os.path.join(CURRENT_DIR, "outputs")
+    
+    setup_console_logger(log_dir=log_dir, prefix="exp1")
     
     print("="*50)
     print("开始执行 实验一：传统算法压缩基线")
     print("="*50)
     
-    # 1. 下载数据
-    enwik8_path = download_enwik8(data_dir="data/enwik8")
+    # 1. 检查本地数据集
+    print("\n--- 正在检查数据集 ---")
+    enwik8_path = os.path.join(ROOT_DIR, "data", "enwik8", "enwik8")
+    if not os.path.exists(enwik8_path):
+        print(f"[错误] 找不到原始数据集 {enwik8_path}。请参考 README 手动下载并解压。")
+        sys.exit(1)
+    print(f"[成功] 已检测到本地数据集: {enwik8_path}")
     
     # 2. 数据切片
     print("\n--- 正在准备数据切片 ---")
-    slices_paths = slice_dataset(input_file=enwik8_path, out_dir="data/enwik8")
+    out_slice_dir = os.path.join(ROOT_DIR, "data", "enwik8")
+    slices_paths = slice_dataset(input_file=enwik8_path, out_dir=out_slice_dir)
     
     # 3. 初始化结果记录器
-    logger = ExperimentLogger(out_dir="exp1/outputs")
+    logger = ExperimentLogger(out_dir=out_dir)
     
     # 4. 执行压缩与测试
     print("\n--- 开始进行压缩测试 ---")
@@ -46,15 +60,16 @@ def run_experiment_1():
             )
             
     # 5. 保存结果到 CSV
-    logger.save_to_csv("results.csv")
+    csv_name = "results.csv"
+    logger.save_to_csv(csv_name)
     
     # 6. 绘制图表
     print("\n--- 正在生成图表 ---")
-    plot_results(csv_path="exp1/outputs/results.csv", out_dir="exp1/outputs")
+    plot_results(csv_path=os.path.join(out_dir, csv_name), out_dir=out_dir)
     
     print("\n实验一执行完毕！")
-    print("- CSV和图表产物位于: exp1/outputs/")
-    print("- 原始控制台日志位于: exp1/logs/")
+    print(f"- CSV和图表产物位于: {out_dir}")
+    print(f"- 原始控制台日志位于: {log_dir}")
 
 if __name__ == "__main__":
     run_experiment_1()

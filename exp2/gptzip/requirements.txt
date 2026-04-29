@@ -1,0 +1,6 @@
+transformers
+accelerate
+modelscope
+pandas
+matplotlib
+requests
