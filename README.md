@@ -58,17 +58,20 @@ uv run main.py
 ### GPTzip 运行
 进入 GPTzip 的独立目录并配置专属的深度学习环境：
 
-```Bash
+```bash
 # 1. 进入对应模型目录
 cd exp2/gptzip
 
 # 2. 初始化 GPTzip 专属环境
 uv venv --python 3.12
 
-# 3. 运行环境智能配置脚本（将自动检测硬件并安装 CPU 或 GPU 版本的 PyTorch）
-uv run pytorchsetup.py
+# 3. 手动安装 PyTorch (请根据你的硬件环境二选一)
+# 【NVIDIA GPU 用户】安装 CUDA 12.4 版本（推荐，需提前装好显卡驱动）:
+uv pip install torch torchvision torchaudio --index-url [https://download.pytorch.org/whl/cu124](https://download.pytorch.org/whl/cu124)
+# 【无显卡或 AMD 用户】安装 CPU 版本:
+uv pip install torch torchvision torchaudio --index-url [https://download.pytorch.org/whl/cpu](https://download.pytorch.org/whl/cpu)
 
-# 4. 安装剩余专属依赖
+# 4. 安装剩余专属依赖 (会自动安装 transformers, modelscope 等)
 uv pip install -r requirements.txt -i [https://mirrors.ustc.edu.cn/pypi/simple](https://mirrors.ustc.edu.cn/pypi/simple)
 
 # 5. 运行实验二
