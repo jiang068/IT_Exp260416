@@ -14,9 +14,6 @@
 ## 项目结构约定
 
 本项目采用**多环境隔离**策略。`exp1` 与 `exp2` 下的各个模型文件夹（如 `gptzip`）均拥有独立的 `.venv` 虚拟环境和 `requirements.txt`。此举旨在彻底解决不同实验间（特别是大语言模型）的依赖与 PyTorch 版本冲突问题。
-
-## 实验 1 (Exp1)
-
 ### 数据集准备
 
 请手动下载以下数据集：
@@ -37,49 +34,5 @@ data/
 └── gutenberg/
     └── alice_in_wonderland.txt
 ```
-
-
-运行实验
-```Bash
-# 1. 进入 exp1 目录
-cd exp1
-
-# 2. 初始化 exp1 的专属轻量级环境
-uv venv --python 3.12
-uv pip install -r requirements.txt -i https://mirrors.ustc.edu.cn/pypi/simple
-
-# 3. 运行实验一主程序
-uv run main.py
-```
-
-运行结束后，CSV 数据记录与性能图表将生成在 exp1/outputs/ 目录下。
-
-## 实验 2 (Exp2)
-### GPTzip 运行
-进入 GPTzip 的独立目录并配置专属的深度学习环境：
-
-```bash
-# 1. 进入对应模型目录
-cd exp2/gptzip
-
-# 2. 初始化 GPTzip 专属环境
-uv venv --python 3.12
-
-# 3. 手动安装 PyTorch (请根据你的硬件环境二选一)
-# 【NVIDIA GPU 用户】安装 CUDA 12.4 版本（推荐，需提前装好显卡驱动）:
-uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
-# 【无显卡或 AMD 用户】安装 CPU 版本:
-uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-
-# 4. 安装剩余专属依赖 (会自动安装 transformers, modelscope 等)
-uv pip install -r requirements.txt -i https://mirrors.ustc.edu.cn/pypi/simple
-
-# 5. 运行实验二
-uv run GPTzip.py
-```
-
-
-运行结束后，结果将保存在 exp2/gptzip/outputs/ 目录下。
-
 
 ---

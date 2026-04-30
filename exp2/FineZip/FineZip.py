@@ -17,9 +17,9 @@ def run_finezip_ac():
     log_dir = os.path.join(CURRENT_DIR, "logs")
     setup_console_logger(log_dir=log_dir, prefix="finezip")
 
-    print("="*50)
-    print("开始执行 实验二：FineZip (Arithmetic Coding) 独立压缩测试")
-    print("="*50)
+    print("="*60)
+    print("开始执行 实验二：FineZip (Arithmetic Coding) 批量压缩测试")
+    print("="*60)
 
     # 1. 定位共享的本地 GPT-2 模型
     model_path = os.path.join(ROOT_DIR, "exp2", "models", "GPTzip_gpt2")
@@ -35,115 +35,140 @@ def run_finezip_ac():
         print(f"[错误] 找不到 FineZip 核心脚本: {ac_script}")
         return
 
-    # 3. 准备输出与临时沙盒目录
+    # 3. 准备输出、输入与临时沙盒目录
+    input_dir = os.path.join(CURRENT_DIR, "inputs")
     out_dir = os.path.join(CURRENT_DIR, "outputs")
     temp_dir = os.path.join(out_dir, "temp")
+    
+    os.makedirs(input_dir, exist_ok=True)
     os.makedirs(temp_dir, exist_ok=True)
+    
     logger = ExperimentLogger(out_dir=out_dir)
 
-    # 指定测试切片
-    slice_name = "1KB"
-    raw_filename = f"enwik8_{slice_name}.txt" # 默认名称 enwik8_1KB.txt
-    raw_path = os.path.join(ROOT_DIR, "data", "enwik8", raw_filename)
+    valid_files = [f for f in os.listdir(input_dir) if os.path.isfile(os.path.join(input_dir, f))]
+    # 【体验优化】：按文件大小从小到大排序，优先测试小文件
+    valid_files.sort(key=lambda x: os.path.getsize(os.path.join(input_dir, x)))
     
-    if not os.path.exists(raw_path):
-        print(f"[错误] 找不到输入文件 {raw_path}。")
-        return
-        
-    raw_size = os.path.getsize(raw_path)
-    
-    # 【沙盒机制】：把原始文本拷贝到 temp 目录，防止 eval_ac.py 污染原始 data 文件夹
-    temp_raw_path = os.path.join(temp_dir, raw_filename)
-    shutil.copy2(raw_path, temp_raw_path)
-
-    print(f"\n[测试切片]: {slice_name} ({raw_size} Bytes)")
-    print(f"  -> 正在复用本地 GPT-2 模型启动 FineZip 推理 ({model_path})...")
-
-    # 构建调用命令
-    cmd = [
-        sys.executable, ac_script,
-        "--model", model_path,       
-        "--tokenizer", model_path,   
-        "--batch_size", "1",
-        "--context_size", "512",
-        "--input_file", temp_raw_path, # 传入沙盒文件
-        "--AC_output_dir", temp_dir,   # 输出到 temp
-        "--encode_decode", "1"
-    ]
-    
-    # 4. 运行 FineZip
-    start_t = time.perf_counter()
-    res = subprocess.run(cmd, cwd=ac_script_dir, capture_output=True, text=True)
-    total_time = time.perf_counter() - start_t
-
-    if res.returncode != 0:
-        print(f"[错误] FineZip 执行失败:\n{res.stderr}")
+    if not valid_files:
+        print(f"[提示] 输入目录为空 ({input_dir})。")
+        print("请把要测试的 .txt 文件放入该目录后再运行本脚本。")
         return
 
-    # 5. 捕获产物并重命名对齐 (统一规范化)
-    # FineZip 默认生成的压缩包叫 0_AC.txt，解压文件叫 xxx_AC_decoded_text.txt
-    orig_comp_path = os.path.join(temp_dir, "0_AC.txt")
-    comp_path = os.path.join(temp_dir, f"{slice_name}_FineZip.ac") # 后缀改为 .ac (Arithmetic Coding)
-    if os.path.exists(orig_comp_path):
-        shutil.move(orig_comp_path, comp_path)
+    # 【核心修复】：配置强制 UTF-8 的环境变量沙盒，防止 Windows GBK 报错
+    utf8_env = os.environ.copy()
+    utf8_env["PYTHONUTF8"] = "1"
+
+    # 4. 开始批量遍历测试
+    for filename in valid_files:
+        raw_path = os.path.join(input_dir, filename)
+        raw_size = os.path.getsize(raw_path)
         
-    orig_dec_path = os.path.join(temp_dir, f"{raw_filename[:-4]}_AC_decoded_text.txt")
-    decomp_path = os.path.join(temp_dir, f"{slice_name}_FineZip.dec.txt")
-    if os.path.exists(orig_dec_path):
-        shutil.move(orig_dec_path, decomp_path)
+        if raw_size > 1048576:
+            print(f"\n[跳过] {filename} 大小为 {raw_size} Bytes (超过 1MB 阈值)")
+            continue
 
-    # 6. 计算尺寸与耗时拆分
-    comp_size = os.path.getsize(comp_path) if os.path.exists(comp_path) else 0
-    
-    # 解析 metrics.json 提取精确的压缩耗时
-    metrics_file = os.path.join(temp_dir, "metrics.json")
-    comp_time = 0.0
-    if os.path.exists(metrics_file):
-        with open(metrics_file, 'r', encoding='utf-8') as mf:
-            metrics = json.load(mf)
-            # eval_ac.py 把压缩时间记作了 '$T'
-            comp_time = metrics.get('$T', total_time / 2)
-    else:
-        comp_time = total_time / 2
+        base_name = filename[:-4] if filename.endswith(".txt") else filename
+        print(f"\n{'-'*15} 测试切片: {filename} ({raw_size} Bytes) {'-'*15}")
+        
+        temp_raw_path = os.path.join(temp_dir, filename)
+        shutil.copy2(raw_path, temp_raw_path)
 
-    # 解压耗时 = 总耗时 - 压缩耗时 (扣除细微的进程开销)
-    decomp_time = max(0.01, total_time - comp_time)
+        print(f"  -> 正在复用本地 GPT-2 模型启动 FineZip 推理...\n")
 
-    # 7. 无损校验
-    is_lossless = False
-    if os.path.exists(decomp_path):
-        with open(raw_path, 'rb') as f1, open(decomp_path, 'rb') as f2:
-            is_lossless = (f1.read() == f2.read())
+        cmd = [
+            sys.executable, ac_script,
+            "--model", model_path,       
+            "--tokenizer", model_path,   
+            "--batch_size", "1",
+            "--context_size", "512",
+            "--input_file", temp_raw_path, 
+            "--AC_output_dir", temp_dir,   
+            "--encode_decode", "1"
+        ]
+        
+        # 【去黑盒化】：移除 capture_output=True，让 tqdm 进度条和 print 实时打印到屏幕！
+        start_t = time.perf_counter()
+        res = subprocess.run(cmd, cwd=ac_script_dir, env=utf8_env)
+        total_time = time.perf_counter() - start_t
 
-    bpb = (comp_size * 8) / raw_size if raw_size > 0 else 0
-    comp_throughput = (raw_size / 1024 / 1024) / comp_time if comp_time > 0 else 0
-    decomp_throughput = (raw_size / 1024 / 1024) / decomp_time if decomp_time > 0 else 0
+        if res.returncode != 0:
+            print(f"\n[错误] {filename} 执行失败！详情请查看上方控制台报错信息。")
+            continue
 
-    print(f"  [结果] BPB={bpb:.4f}, 压时={comp_time:.2f}s, 解时={decomp_time:.2f}s, 校验={'通过' if is_lossless else '失败'}")
+        # 5. 捕获产物并重命名对齐 (统一规范化)
+        orig_comp_path = os.path.join(temp_dir, "0_AC.txt")
+        comp_path = os.path.join(temp_dir, f"{base_name}_FineZip.ac") 
+        if os.path.exists(orig_comp_path):
+            shutil.move(orig_comp_path, comp_path)
+            
+        orig_dec_path = os.path.join(temp_dir, f"{filename[:-4]}_AC_decoded_text.txt")
+        decomp_path = os.path.join(temp_dir, f"{base_name}_FineZip.dec.txt")
+        
+        if os.path.exists(orig_dec_path):
+            with open(orig_dec_path, 'rb') as f:
+                content = f.read()
+                
+            content = content.replace(b'\r\n', b'\n')
+            
+            with open(decomp_path, 'wb') as f:
+                f.write(content)
+                
+            os.remove(orig_dec_path)
 
-    # 8. 写入日志对齐 GPTzip 格式
-    logger.results.append({
-        "Method": "FineZip (GPT-2)", 
-        "Slice": slice_name, 
-        "Raw_Size(B)": raw_size,
-        "Comp_Size(B)": comp_size, 
-        "BPB": bpb, 
-        "Comp_Time(s)": comp_time,
-        "Decomp_Time(s)": decomp_time, 
-        "Comp_Throughput(MB/s)": comp_throughput,
-        "Decomp_Throughput(MB/s)": decomp_throughput,
-        "Lossless": is_lossless
-    })
-    
-    csv_name = "finezip_results.csv"
-    logger.save_to_csv(csv_name)
-    
-    # 扫尾清理沙盒里的无用文件
-    if os.path.exists(temp_raw_path): os.remove(temp_raw_path)
-    if os.path.exists(metrics_file): os.remove(metrics_file)
+        # 6. 计算尺寸与耗时拆分
+        comp_size = os.path.getsize(comp_path) if os.path.exists(comp_path) else 0
+        
+        metrics_file = os.path.join(temp_dir, "metrics.json")
+        comp_time = 0.0
+        if os.path.exists(metrics_file):
+            with open(metrics_file, 'r', encoding='utf-8') as mf:
+                try:
+                    metrics = json.load(mf)
+                    comp_time = metrics.get('$T', total_time / 2)
+                except json.JSONDecodeError:
+                    comp_time = total_time / 2
+        else:
+            comp_time = total_time / 2
 
-    print("\nFineZip 实验执行完毕！")
-    print(f"- 数据结果已保存至: {os.path.join(out_dir, csv_name)}")
+        decomp_time = max(0.01, total_time - comp_time)
+
+        # 7. 无损校验
+        is_lossless = False
+        if os.path.exists(decomp_path):
+            with open(raw_path, 'rb') as f1, open(decomp_path, 'rb') as f2:
+                is_lossless = (f1.read() == f2.read())
+
+        bpb = (comp_size * 8) / raw_size if raw_size > 0 else 0
+        comp_throughput = (raw_size / 1024 / 1024) / comp_time if comp_time > 0 else 0
+        decomp_throughput = (raw_size / 1024 / 1024) / decomp_time if decomp_time > 0 else 0
+
+        print(f"\n  [结果] BPB={bpb:.4f}, 压时={comp_time:.2f}s, 解时={decomp_time:.2f}s, 校验={'通过' if is_lossless else '失败'}")
+
+        # 8. 写入日志
+        logger.results.append({
+            "Method": "FineZip (GPT-2)", 
+            "Slice": base_name, 
+            "Raw_Size(B)": raw_size,
+            "Comp_Size(B)": comp_size, 
+            "BPB": bpb, 
+            "Comp_Time(s)": comp_time,
+            "Decomp_Time(s)": decomp_time, 
+            "Comp_Throughput(MB/s)": comp_throughput,
+            "Decomp_Throughput(MB/s)": decomp_throughput,
+            "Lossless": is_lossless
+        })
+        
+        # 扫尾清理
+        if os.path.exists(temp_raw_path): os.remove(temp_raw_path)
+        if os.path.exists(metrics_file): os.remove(metrics_file)
+
+    if logger.results:
+        csv_name = "finezip_results.csv"
+        logger.save_to_csv(csv_name)
+        print("\n" + "="*60)
+        print("FineZip 批量实验执行完毕！")
+        print(f"- 统一数据汇总表已保存至: {os.path.join(out_dir, csv_name)}")
+        print("="*60)
 
 if __name__ == "__main__":
     run_finezip_ac()

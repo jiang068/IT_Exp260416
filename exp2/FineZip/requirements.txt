@@ -1,8 +1,0 @@
-numpy
-tqdm
-transformers
-accelerate
-matplotlib
-peft
-bitsandbytes
-modelscope
