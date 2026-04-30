@@ -6,9 +6,11 @@ import subprocess
 # === 动态路径寻址 ===
 # 当前脚本所在目录: exp2/gptzip
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+# exp2 目录 (退一层)
+EXP2_DIR = os.path.dirname(CURRENT_DIR)
 # 项目根目录: 退三层 (gptzip -> exp2 -> IT_Exp260416)
-ROOT_DIR = os.path.dirname(os.path.dirname(CURRENT_DIR))
-# 将项目根目录加入环境变量，以找到 tools 和 cp (如果你还需要 cp 里的 legency)
+ROOT_DIR = os.path.dirname(EXP2_DIR)
+# 将项目根目录加入环境变量，以找到 tools
 sys.path.append(ROOT_DIR)
 
 from tools.logger import setup_console_logger
@@ -24,15 +26,19 @@ def ensure_gptzip_submodule():
     return script_path
 
 def ensure_model():
-    """将模型下载到本实验专属的 exp2/gptzip/GPTzip_gpt2 目录"""
+    """将模型下载到实验二共享的 exp2/models/GPTzip_gpt2 目录"""
     try:
         from modelscope.hub.snapshot_download import snapshot_download
     except ImportError:
         print("[错误] 未安装 modelscope，请在此环境中运行: uv pip install modelscope")
         sys.exit(1)
 
-    # 模型路径直接落在 exp2/gptzip/GPTzip_gpt2
-    save_path = os.path.join(CURRENT_DIR, "GPTzip_gpt2")
+    # 【修改点】：建立共享的 exp2/models 文件夹
+    model_dir = os.path.join(EXP2_DIR, "models")
+    os.makedirs(model_dir, exist_ok=True)
+    
+    # 模型路径落在共享目录
+    save_path = os.path.join(model_dir, "GPTzip_gpt2")
 
     if os.path.exists(save_path):
         print(f"[准备] GPT-2 模型已存在于 {save_path}，跳过下载。")
@@ -47,7 +53,7 @@ def run_gptzip():
     setup_console_logger(log_dir=log_dir, prefix="gptzip")
 
     print("="*50)
-    print("开始执行 实验二：GPTzip 独立压缩测试 (Submodule 架构版)")
+    print("开始执行 实验二：GPTzip 独立压缩测试 (共享模型版)")
     print("="*50)
 
     # 1. 验证子模块与获取模型绝对路径

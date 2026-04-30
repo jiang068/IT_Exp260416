@@ -23,7 +23,9 @@ venv/
 Thumbs.db
 
 # exp2
+exp2/models
+
 # exp2/gptzip/GPTzip
-exp2/gptzip/GPTzip_gpt2
 exp2/gptzip/logs
 
+exp2/finezip/logs

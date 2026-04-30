@@ -46,7 +46,7 @@ cd exp1
 
 # 2. 初始化 exp1 的专属轻量级环境
 uv venv --python 3.12
-uv pip install -r requirements.txt -i [https://mirrors.ustc.edu.cn/pypi/simple](https://mirrors.ustc.edu.cn/pypi/simple)
+uv pip install -r requirements.txt -i https://mirrors.ustc.edu.cn/pypi/simple
 
 # 3. 运行实验一主程序
 uv run main.py
@@ -67,12 +67,12 @@ uv venv --python 3.12
 
 # 3. 手动安装 PyTorch (请根据你的硬件环境二选一)
 # 【NVIDIA GPU 用户】安装 CUDA 12.4 版本（推荐，需提前装好显卡驱动）:
-uv pip install torch torchvision torchaudio --index-url [https://download.pytorch.org/whl/cu124](https://download.pytorch.org/whl/cu124)
+uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
 # 【无显卡或 AMD 用户】安装 CPU 版本:
-uv pip install torch torchvision torchaudio --index-url [https://download.pytorch.org/whl/cpu](https://download.pytorch.org/whl/cpu)
+uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
 
 # 4. 安装剩余专属依赖 (会自动安装 transformers, modelscope 等)
-uv pip install -r requirements.txt -i [https://mirrors.ustc.edu.cn/pypi/simple](https://mirrors.ustc.edu.cn/pypi/simple)
+uv pip install -r requirements.txt -i https://mirrors.ustc.edu.cn/pypi/simple
 
 # 5. 运行实验二
 uv run GPTzip.py
