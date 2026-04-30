@@ -163,7 +163,8 @@ def run_finezip_ac():
         if os.path.exists(metrics_file): os.remove(metrics_file)
 
     if logger.results:
-        csv_name = "finezip_results.csv"
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        csv_name = f"finezip_results_{timestamp}.csv"
         logger.save_to_csv(csv_name)
         print("\n" + "="*60)
         print("FineZip 批量实验执行完毕！")

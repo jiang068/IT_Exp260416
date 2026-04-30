@@ -1,4 +1,4 @@
-## 实验 2 (Exp2)
+### 实验 2 (Exp2)
 三个实验：
 GPTzip
 FineZip
@@ -22,3 +22,17 @@ uv pip install torch torchvision torchaudio --index-url https://download.pytorch
 uv pip install -r requirements.txt -i https://mirrors.ustc.edu.cn/pypi/simple
 ```
 
+#### GPTzip
+```bash
+cd gptzip
+uv run GPTzip.py
+```
+
+#### FineZip
+先把待处理文件放入 `exp2\finezip\inputs`。  
+不要放超过 `1MB` 的文件，除非你有足够时间。  
+
+```bash
+cd finezip
+uv run FineZip.py
+```

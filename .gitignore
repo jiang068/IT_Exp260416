@@ -22,11 +22,17 @@ venv/
 .DS_Store
 Thumbs.db
 
+# exp1
+exp1/logs
+exp1/inputs
+
 # exp2
 exp2/models
 
 # exp2/gptzip/GPTzip
 exp2/gptzip/logs
+exp2/gptzip/inputs
 
 exp2/finezip/logs
 exp2/finezip/inputs
+

@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 
 # === 动态路径寻址 ===
 # 当前脚本所在目录: exp1
@@ -9,69 +10,133 @@ ROOT_DIR = os.path.dirname(CURRENT_DIR)
 # 将项目根目录加入环境变量，以便找到 tools
 sys.path.append(ROOT_DIR)
 
-from tools.divide import slice_dataset
 from tools.record import ExperimentLogger
 from tools.draw import plot_results
 from tools.logger import setup_console_logger
 
-# 【修改这里】：因为 legency.py 现在和 main.py 在同一个目录下，直接导入即可
+# 导入传统压缩算法字典
 from legency import TRADITIONAL_COMPRESSORS
 
 def run_experiment_1():
-    # 日志和输出目录内聚到 exp1 目录下
+    # 准备目录架构
     log_dir = os.path.join(CURRENT_DIR, "logs")
+    input_dir = os.path.join(CURRENT_DIR, "inputs")
     out_dir = os.path.join(CURRENT_DIR, "outputs")
+    temp_dir = os.path.join(out_dir, "temp")
+    
+    os.makedirs(input_dir, exist_ok=True)
+    os.makedirs(temp_dir, exist_ok=True)
     
     setup_console_logger(log_dir=log_dir, prefix="exp1")
     
-    print("="*50)
-    print("开始执行 实验一：传统算法压缩基线")
-    print("="*50)
+    print("="*60)
+    print("开始执行 实验一：传统算法压缩 批量基线测试")
+    print("="*60)
     
-    # 1. 检查本地数据集
-    print("\n--- 正在检查数据集 ---")
-    enwik8_path = os.path.join(ROOT_DIR, "data", "enwik8", "enwik8")
-    if not os.path.exists(enwik8_path):
-        print(f"[错误] 找不到原始数据集 {enwik8_path}。请参考 README 手动下载并解压。")
-        sys.exit(1)
-    print(f"[成功] 已检测到本地数据集: {enwik8_path}")
-    
-    # 2. 数据切片
-    print("\n--- 正在准备数据切片 ---")
-    out_slice_dir = os.path.join(ROOT_DIR, "data", "enwik8")
-    slices_paths = slice_dataset(input_file=enwik8_path, out_dir=out_slice_dir)
-    
-    # 3. 初始化结果记录器
     logger = ExperimentLogger(out_dir=out_dir)
+
+    # 1. 扫描 inputs 目录并过滤、排序
+    valid_files = [f for f in os.listdir(input_dir) if os.path.isfile(os.path.join(input_dir, f))]
+    # 按文件大小从小到大排序
+    valid_files.sort(key=lambda x: os.path.getsize(os.path.join(input_dir, x)))
+
+    if not valid_files:
+        print(f"\n[提示] 输入目录为空 ({input_dir})。")
+        print("请将测试切片 (如 enwik8_1KB.txt) 放入该目录后再运行本脚本。")
+        return
+
+    print("\n--- 开始批量遍历测试 ---")
     
-    # 4. 执行压缩与测试
-    print("\n--- 开始进行压缩测试 ---")
-    slice_order = ["1KB", "10KB", "100KB", "1MB"]
-    
-    for slice_name in slice_order:
-        raw_path = slices_paths[slice_name]
-        print(f"\n[测试切片]: {slice_name}")
+    # 2. 遍历每个文件
+    for filename in valid_files:
+        raw_path = os.path.join(input_dir, filename)
+        raw_size = os.path.getsize(raw_path)
         
+        # 容量拦截器：大于 1MB (1,048,576 Bytes) 直接忽略
+        if raw_size > 1048576:
+            print(f"\n[跳过] {filename} 大小为 {raw_size} Bytes (超过 1MB 阈值)")
+            continue
+
+        base_name = filename[:-4] if filename.endswith(".txt") else filename
+        # 【关键修复】：从 "enwik8_1KB" 中提取出纯净的 "1KB"，以兼容画图脚本
+        slice_name = base_name.split('_')[-1] if '_' in base_name else base_name
+        
+        print(f"\n{'-'*15} 测试切片: {slice_name} ({raw_size} Bytes) {'-'*15}")
+        
+        # 一次性读取原始二进制数据，用于后续算法通用
+        with open(raw_path, 'rb') as f:
+            raw_data = f.read()
+
+        # 3. 遍历每一种传统压缩算法 (Zip, BZ2, LZMA 等)
         for method_name, (comp_fn, decomp_fn) in TRADITIONAL_COMPRESSORS.items():
-            logger.record_and_verify(
-                method_name=method_name,
-                slice_name=slice_name,
-                raw_path=raw_path,
-                compress_func=comp_fn,
-                decompress_func=decomp_fn
-            )
             
-    # 5. 保存结果到 CSV
-    csv_name = "results.csv"
-    logger.save_to_csv(csv_name)
-    
-    # 6. 绘制图表
-    print("\n--- 正在生成图表 ---")
-    plot_results(csv_path=os.path.join(out_dir, csv_name), out_dir=out_dir)
-    
-    print("\n实验一执行完毕！")
-    print(f"- CSV和图表产物位于: {out_dir}")
-    print(f"- 原始控制台日志位于: {log_dir}")
+            comp_path = os.path.join(temp_dir, f"{base_name}_{method_name}.bin")
+            decomp_path = os.path.join(temp_dir, f"{base_name}_{method_name}.dec.txt")
+            
+            # === 压缩阶段 ===
+            start_t = time.perf_counter()
+            comp_data = comp_fn(raw_data)
+            comp_time = time.perf_counter() - start_t
+            
+            # 将压缩后的二进制流落盘保存
+            with open(comp_path, 'wb') as f:
+                f.write(comp_data)
+                
+            comp_size = len(comp_data)
+            
+            # === 解压阶段 ===
+            start_t = time.perf_counter()
+            decomp_data = decomp_fn(comp_data)
+            decomp_time = time.perf_counter() - start_t
+            
+            # 将解压后的数据落盘保存 (因为原本就是从二进制读的，直接以二进制写回，彻底避开 CRLF 问题)
+            with open(decomp_path, 'wb') as f:
+                f.write(decomp_data)
+
+            # === 无损校验 ===
+            is_lossless = (raw_data == decomp_data)
+
+            # === 计算指标 ===
+            bpb = (comp_size * 8) / raw_size if raw_size > 0 else 0
+            comp_throughput = (raw_size / 1024 / 1024) / comp_time if comp_time > 0 else 0
+            decomp_throughput = (raw_size / 1024 / 1024) / decomp_time if decomp_time > 0 else 0
+
+            print(f"  [{method_name.ljust(6)}] BPB={bpb:.4f}, 压时={comp_time:.4f}s, 解时={decomp_time:.4f}s, 校验={'通过' if is_lossless else '失败'}")
+
+            # === 写入日志结构 ===
+            logger.results.append({
+                "Method": method_name, 
+                "Slice": slice_name,
+                "Raw_Size(B)": raw_size,
+                "Comp_Size(B)": comp_size, 
+                "BPB": bpb, 
+                "Comp_Time(s)": comp_time,
+                "Decomp_Time(s)": decomp_time, 
+                "Comp_Throughput(MB/s)": comp_throughput,
+                "Decomp_Throughput(MB/s)": decomp_throughput,
+                "Lossless": is_lossless
+            })
+
+    # 4. 所有测试结束，保存 CSV 并绘图
+    if logger.results:
+        # 加上时间戳
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        csv_name = f"legency_results_{timestamp}.csv"
+        
+        logger.save_to_csv(csv_name)
+        
+        print("\n--- 正在生成图表 ---")
+        csv_full_path = os.path.join(out_dir, csv_name)
+        try:
+            plot_results(csv_path=csv_full_path, out_dir=out_dir)
+        except Exception as e:
+            print(f"[警告] 画图步骤出现异常，但数据已成功保存。原因: {e}")
+
+        print("\n" + "="*60)
+        print("实验一：传统算法压缩 批量执行完毕！")
+        print(f"- 统一数据汇总表已保存至: {csv_full_path}")
+        print(f"- 物理压缩/解压产物已保存至: {temp_dir}")
+        print("="*60)
 
 if __name__ == "__main__":
     run_experiment_1()
