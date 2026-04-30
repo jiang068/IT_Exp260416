@@ -1,3 +1,6 @@
 [submodule "exp2/gptzip/GPTzip"]
 	path = exp2/gptzip/GPTzip
 	url = https://github.com/jiang068/GPTzip.git
+[submodule "exp2/FineZip/FineZip"]
+	path = exp2/FineZip/FineZip
+	url = https://github.com/fazalmittu/FineZip.git
