@@ -36,3 +36,5 @@ exp2/gptzip/inputs
 exp2/finezip/logs
 exp2/finezip/inputs
 
+exp2/llmzip/logs
+exp2/llmzip/inputs

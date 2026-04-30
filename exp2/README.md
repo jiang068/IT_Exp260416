@@ -4,7 +4,7 @@ GPTzip
 FineZip
 LLMzip
 
-三个实验环境可以共用，不需要分开安装：
+三个实验环境可以共用，不需要分开部署：
 ```
 # 1. 进入 exp2 目录
 cd exp2
@@ -21,6 +21,8 @@ uv pip install torch torchvision torchaudio --index-url https://download.pytorch
 # 4. 安装剩余专属依赖 (会自动安装 transformers, modelscope 等)
 uv pip install -r requirements.txt -i https://mirrors.ustc.edu.cn/pypi/simple
 ```
+先把待处理文件放入 `exp2\*zip\inputs`。  
+不要放超过 `1MB` 的文件，除非你有足够时间。  
 
 #### GPTzip
 ```bash
@@ -29,10 +31,22 @@ uv run GPTzip.py
 ```
 
 #### FineZip
-先把待处理文件放入 `exp2\finezip\inputs`。  
-不要放超过 `1MB` 的文件，除非你有足够时间。  
-
 ```bash
 cd finezip
 uv run FineZip.py
 ```
+
+#### LLMzip
+```bash
+cd llmzip
+uv run LLMzip.py
+```
+默认会以AC模式调用。如果想换成RZ模式只要把157行的：
+```python
+compression_alg='ArithmeticCoding',
+```
+
+换成：RankZip 或 both。
+
+输出均在 `exp2\*zip\outputs` 目录里。  
+实验报告将会基于各实验的 `output` 书写。

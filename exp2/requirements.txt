@@ -9,3 +9,4 @@ tqdm
 matplotlib
 sentencepiece
 requests
+scipy
