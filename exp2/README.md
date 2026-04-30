@@ -1,8 +1,8 @@
 ### 实验 2 (Exp2)
 三个实验：
-GPTzip
-FineZip
-LLMzip
+- GPTzip
+- FineZip
+- LLMzip
 
 三个实验环境可以共用，不需要分开部署：
 ```
@@ -24,6 +24,7 @@ uv pip install -r requirements.txt -i https://mirrors.ustc.edu.cn/pypi/simple
 先把待处理文件放入 `exp2\*zip\inputs`。  
 不要放超过 `1MB` 的文件，除非你有足够时间。  
 
+再分别运行压缩：
 #### GPTzip
 ```bash
 cd gptzip
@@ -50,3 +51,5 @@ compression_alg='ArithmeticCoding',
 
 输出均在 `exp2\*zip\outputs` 目录里。  
 实验报告将会基于各实验的 `output` 书写。
+
+---
