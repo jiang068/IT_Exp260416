@@ -1,2 +1,0 @@
-﻿Method,Slice,Raw_Size(B),Comp_Size(B),BPB,Comp_Time(s),Decomp_Time(s),Comp_Throughput(MB/s),Decomp_Throughput(MB/s),Lossless
-GPTzip (GPT-2),1KB,1024,188,1.46875,37.43172460000005,11.824896200000012,2.6089166620979005e-05,8.258529153093107e-05,True

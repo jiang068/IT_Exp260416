@@ -138,7 +138,8 @@ def run_llmzip():
         
         print(f"\n{'-'*15} 测试切片: {slice_name} ({raw_size} Bytes) {'-'*15}")
 
-        with open(raw_path, 'r', encoding='utf-8') as f:
+        # 【核心修复】：加入 newline=''，让 Python 保持原汁原味的 \r\n 喂给模型
+        with open(raw_path, 'r', encoding='utf-8', newline='') as f:
             raw_text = f.read()
 
         # 生成基础前缀
@@ -183,10 +184,16 @@ def run_llmzip():
         )
         decomp_time = time.perf_counter() - start_t
 
-        # --- 8. 格式修正：抹平 CRLF ---
-        # 直接以二进制形式将字符串 encode 后落盘，防止 Windows 乱加 \r\n
+        # --- 8. 格式修正：动态自适应还原原始换行符 ---
+        with open(raw_path, 'rb') as fr:
+            raw_bytes = fr.read()
+            
+        dec_bytes = decoded_text.encode('utf-8').replace(b'\r\n', b'\n')
+        if b'\r\n' in raw_bytes:
+            dec_bytes = dec_bytes.replace(b'\n', b'\r\n')
+            
         with open(decomp_path, 'wb') as f:
-            f.write(decoded_text.encode('utf-8'))
+            f.write(dec_bytes)
             
         # --- 9. 无损校验 ---
         is_lossless = False

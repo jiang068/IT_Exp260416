@@ -67,11 +67,15 @@ def run_finezip_ac():
             print(f"\n[跳过] {filename} 大小为 {raw_size} Bytes (超过 1MB 阈值)")
             continue
 
-        base_name = filename[:-4] if filename.endswith(".txt") else filename
+        # 安全提取无后缀文件名，兼容 .html 和 .txt
+        base_name = os.path.splitext(filename)[0]
         print(f"\n{'-'*15} 测试切片: {filename} ({raw_size} Bytes) {'-'*15}")
         
-        temp_raw_path = os.path.join(temp_dir, filename)
-        shutil.copy2(raw_path, temp_raw_path)
+        # ========================================================
+        # 修复 1：伪装马甲法。无论什么格式，统统伪装成 .txt 喂给模型
+        # ========================================================
+        temp_txt_raw = os.path.join(temp_dir, f"{base_name}_fake.txt")
+        shutil.copy2(raw_path, temp_txt_raw)
 
         print(f"  -> 正在复用本地 GPT-2 模型启动 FineZip 推理...\n")
 
@@ -81,37 +85,48 @@ def run_finezip_ac():
             "--tokenizer", model_path,   
             "--batch_size", "1",
             "--context_size", "512",
-            "--input_file", temp_raw_path, 
+            "--input_file", temp_txt_raw, # 传入伪装的 txt 文件
             "--AC_output_dir", temp_dir,   
             "--encode_decode", "1"
         ]
         
-        # 【去黑盒化】：移除 capture_output=True，让 tqdm 进度条和 print 实时打印到屏幕！
         start_t = time.perf_counter()
         res = subprocess.run(cmd, cwd=ac_script_dir, env=utf8_env)
         total_time = time.perf_counter() - start_t
 
         if res.returncode != 0:
             print(f"\n[错误] {filename} 执行失败！详情请查看上方控制台报错信息。")
+            if os.path.exists(temp_txt_raw): os.remove(temp_txt_raw)
             continue
 
-        # 5. 捕获产物并重命名对齐 (统一规范化)
+        # 5. 捕获产物并重命名对齐
         orig_comp_path = os.path.join(temp_dir, "0_AC.txt")
         comp_path = os.path.join(temp_dir, f"{base_name}_FineZip.ac") 
         if os.path.exists(orig_comp_path):
             shutil.move(orig_comp_path, comp_path)
             
-        orig_dec_path = os.path.join(temp_dir, f"{filename[:-4]}_AC_decoded_text.txt")
+        # 因为我们传的是 _fake.txt，FineZip 必然吐出 _fake_AC_decoded_text.txt
+        orig_dec_path = os.path.join(temp_dir, f"{base_name}_fake_AC_decoded_text.txt")
         decomp_path = os.path.join(temp_dir, f"{base_name}_FineZip.dec.txt")
         
+        # ========================================================
+        # 修复 2：逻辑闭环的动态自适应还原原始换行符 (CRLF/LF)
+        # ========================================================
         if os.path.exists(orig_dec_path):
-            with open(orig_dec_path, 'rb') as f:
-                content = f.read()
+            with open(raw_path, 'rb') as fr:
+                raw_bytes = fr.read()
+            with open(orig_dec_path, 'rb') as fd:
+                dec_bytes = fd.read()
                 
-            content = content.replace(b'\r\n', b'\n')
-            
-            with open(decomp_path, 'wb') as f:
-                f.write(content)
+            # 先统一降维到纯 LF
+            dec_bytes = dec_bytes.replace(b'\r\n', b'\n')
+            # 如果原始文件里包含 CRLF，就把 LF 强行升维还原回 CRLF
+            if b'\r\n' in raw_bytes:
+                dec_bytes = dec_bytes.replace(b'\n', b'\r\n')
+                
+            # 最终写到 decomp_path！
+            with open(decomp_path, 'wb') as fd:
+                fd.write(dec_bytes)
                 
             os.remove(orig_dec_path)
 
@@ -159,7 +174,7 @@ def run_finezip_ac():
         })
         
         # 扫尾清理
-        if os.path.exists(temp_raw_path): os.remove(temp_raw_path)
+        if os.path.exists(temp_txt_raw): os.remove(temp_txt_raw)
         if os.path.exists(metrics_file): os.remove(metrics_file)
 
     if logger.results:

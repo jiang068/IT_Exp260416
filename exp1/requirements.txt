@@ -1,4 +1,5 @@
-zstandard==0.22.0
-matplotlib==3.8.4
-pandas==2.2.2
-requests==2.31.0
+zstandard
+matplotlib
+pandas
+requests
+seaborn

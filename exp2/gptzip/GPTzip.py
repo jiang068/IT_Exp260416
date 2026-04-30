@@ -80,11 +80,21 @@ def run_gptzip():
         # --- 4. 执行压缩 ---
         print(f"  -> 正在进行压缩 (实时输出):")
         start_t = time.perf_counter()
-        comp_cmd = [sys.executable, gptzip_script, "-z", raw_path, "-o", comp_path, "-m", model_path]
-        # 移除 capture_output=True，让内部的进度条实时显示！
+        
+        # 【核心修复：障眼法】原作者代码里写死了只接受 .txt 后缀。
+        # 我们在这里创建一个临时伪装文件，骗过原作者的 if 判断！
+        temp_txt_raw = os.path.join(temp_dir, f"{base_name}_fake.txt")
+        shutil.copy2(raw_path, temp_txt_raw)
+        
+        # 注意这里把输入文件换成了伪装的 temp_txt_raw
+        comp_cmd = [sys.executable, gptzip_script, "-z", temp_txt_raw, "-o", comp_path, "-m", model_path]
         res_comp = subprocess.run(comp_cmd, env=utf8_env)
         
-        if res_comp.returncode != 0:
+        # 阅后即焚，销毁伪装文件
+        if os.path.exists(temp_txt_raw):
+            os.remove(temp_txt_raw)
+        
+        if res_comp.returncode != 0 or not os.path.exists(comp_path):
             print(f"\n[错误] {filename} 压缩失败！")
             continue
             
@@ -103,13 +113,21 @@ def run_gptzip():
             
         decomp_time = time.perf_counter() - start_t
 
-        # --- 6. 格式修正：抹平 Windows CRLF ---
+        # --- 6. 格式修正：动态自适应还原原始换行符 (CRLF/LF) ---
         if os.path.exists(decomp_path):
-            with open(decomp_path, 'rb') as f:
-                content = f.read()
-            content = content.replace(b'\r\n', b'\n')
-            with open(decomp_path, 'wb') as f:
-                f.write(content)
+            with open(raw_path, 'rb') as fr:
+                raw_bytes = fr.read()
+            with open(decomp_path, 'rb') as fd:
+                dec_bytes = fd.read()
+                
+            # 先统一降维到纯 LF
+            dec_bytes = dec_bytes.replace(b'\r\n', b'\n')
+            # 如果原始文件里包含 CRLF，就把 LF 强行升维还原回 CRLF
+            if b'\r\n' in raw_bytes:
+                dec_bytes = dec_bytes.replace(b'\n', b'\r\n')
+                
+            with open(decomp_path, 'wb') as fd:
+                fd.write(dec_bytes)
 
         # --- 7. 无损校验 ---
         is_lossless = False

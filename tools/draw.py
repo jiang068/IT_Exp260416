@@ -1,80 +1,128 @@
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
-import numpy as np
+import seaborn as sns
+import warnings
 
-def plot_results(csv_path, out_dir):
-    if not os.path.exists(csv_path):
-        print(f"找不到日志文件 {csv_path}，无法绘图。")
+# 忽略 Seaborn 的一些常规版本警告
+warnings.filterwarnings('ignore')
+
+# 设置中文字体以防方块乱码 (兼容 Windows)
+plt.rcParams['font.sans-serif'] = ['Microsoft YaHei', 'SimHei', 'Arial Unicode MS']
+plt.rcParams['axes.unicode_minus'] = False
+
+def extract_dataset_name(filename):
+    """智能解析文件名，提取数据集核心名称"""
+    name_no_ext = os.path.splitext(filename)[0]
+    if '_' in name_no_ext:
+        return name_no_ext.rsplit('_', 1)[0]
+    return name_no_ext
+
+def plot_results(csv_path, out_dir="outputs"):
+    os.makedirs(out_dir, exist_ok=True)
+    df = pd.read_csv(csv_path)
+
+    if df.empty:
+        print("[Draw] ⚠️ CSV数据为空，跳过绘图。")
         return
 
-    df = pd.DataFrame(pd.read_csv(csv_path))
-    os.makedirs(out_dir, exist_ok=True)
+    # 1. 解析出独立的 Dataset 列
+    if 'File' in df.columns:
+        df['Dataset'] = df['File'].apply(extract_dataset_name)
+    else:
+        df['Dataset'] = 'default_dataset'
+
+    # ====================================================================
+    # 核心修复 1：为 Slice 建立严谨的物理容量排序，杜绝字母乱序 (如 1MB 排在 100KB 前面)
+    # ====================================================================
+    slice_order = df[['Slice', 'Raw_Size(B)']].drop_duplicates().sort_values('Raw_Size(B)')['Slice'].tolist()
+    df['Slice'] = pd.Categorical(df['Slice'], categories=slice_order, ordered=True)
     
-    # 设置图表字体以支持中文 (Windows默认微软雅黑)
-    plt.rcParams['font.sans-serif'] = ['Microsoft YaHei']
-    plt.rcParams['axes.unicode_minus'] = False
+    df = df.sort_values(by=['Dataset', 'Raw_Size(B)'])
 
-    # 将 Slice 转换为数值(Byte)以便于横坐标排序
-    size_map = {"1KB": 1024, "10KB": 10240, "100KB": 102400, "1MB": 1048576}
-    df['Size_Num'] = df['Slice'].map(size_map)
-    # 按照 Size_Num 排序，保证后续画图 X 轴顺序正确
-    df.sort_values('Size_Num', inplace=True)
+    generated_plots = 0
 
-    methods = df['Method'].unique()
+    dataset_sizes = df.groupby('Dataset')['Raw_Size(B)'].nunique()
+    trend_datasets = dataset_sizes[dataset_sizes > 1].index
 
-    # --- 图1: 文本长度 — 压缩效率(BPB) 曲线图 ---
-    plt.figure(figsize=(10, 6))
-    for m in methods:
-        sub_df = df[df['Method'] == m]
-        plt.plot(sub_df['Slice'], sub_df['BPB'], marker='o', label=m)
+    # ====================================================================
+    # 图表 1：纯净版趋势图 (仅为拥有多个尺寸的数据集绘制)
+    # ====================================================================
+    for ds in trend_datasets:
+        ds_df = df[df['Dataset'] == ds]
         
-    plt.title("文本长度与压缩效率(BPB)关系")
-    plt.xlabel("文本长度切片")
-    plt.ylabel("Bits Per Byte (BPB) - 越低越好")
-    plt.legend()
-    plt.grid(True, linestyle='--', alpha=0.6)
-    plt.savefig(os.path.join(out_dir, "length_vs_bpb.png"))
-    plt.close()
+        # 1.1 BPB vs 切片大小
+        plt.figure(figsize=(10, 6))
+        sns.lineplot(data=ds_df, x='Slice', y='BPB', hue='Method', marker='o', linewidth=2, markersize=8)
+        plt.title(f'[{ds}] 压缩率随切片大小变化趋势', fontsize=14, pad=15)
+        plt.xlabel('切片大小', fontsize=12)
+        plt.ylabel('BPB (Bits Per Byte, 越低越好)', fontsize=12)
+        plt.grid(True, linestyle='--', alpha=0.6)
+        plt.tight_layout()
+        plt.savefig(os.path.join(out_dir, f'trend_bpb_{ds}.png'), dpi=300)
+        plt.close()
+        generated_plots += 1
 
-    # --- 图2: 压缩效率(BPB) — 吞吐量(MB/s) 散点图 ---
-    plt.figure(figsize=(10, 6))
-    df_1mb = df[df['Slice'] == '1MB']
-    
-    for _, row in df_1mb.iterrows():
-        plt.scatter(row['BPB'], row['Comp_Throughput(MB/s)'], s=100, label=row['Method'])
-        plt.annotate(row['Method'], (row['BPB'], row['Comp_Throughput(MB/s)']), xytext=(5,5), textcoords='offset points')
+        # ====================================================================
+        # 核心修复 2：利用 pd.melt (数据透视表) 彻底解决 Seaborn 的图例崩溃 Bug
+        # ====================================================================
+        try:
+            time_df = ds_df.melt(id_vars=['Slice', 'Method'], 
+                                 value_vars=['Comp_Time(s)', 'Decomp_Time(s)'],
+                                 var_name='Time_Type', value_name='Time(s)')
+            # 汉化图例
+            time_df['Time_Type'] = time_df['Time_Type'].replace({'Comp_Time(s)': '压缩', 'Decomp_Time(s)': '解压'})
 
-    plt.title("1MB切片下：压缩效率(BPB) vs 压缩吞吐量(MB/s)")
-    plt.xlabel("Bits Per Byte (BPB) - 越低越好")
-    plt.ylabel("压缩吞吐量 (MB/s) - 越高越好")
-    plt.grid(True, linestyle='--', alpha=0.6)
-    plt.savefig(os.path.join(out_dir, "bpb_vs_throughput.png"))
-    plt.close()
+            plt.figure(figsize=(10, 6))
+            # style 参数会自动为压缩和解压分配实线和虚线
+            sns.lineplot(data=time_df, x='Slice', y='Time(s)', hue='Method', style='Time_Type', markers=True, dashes=True)
+            plt.title(f'[{ds}] 耗时随切片大小变化趋势', fontsize=14, pad=15)
+            plt.xlabel('切片大小', fontsize=12)
+            plt.ylabel('耗时 (秒, Log对数坐标)', fontsize=12)
+            plt.yscale('log') 
+            plt.grid(True, linestyle='--', alpha=0.6)
+            plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+            plt.tight_layout()
+            plt.savefig(os.path.join(out_dir, f'trend_time_{ds}.png'), dpi=300)
+            plt.close()
+            generated_plots += 1
+        except Exception as e:
+            print(f"[Draw] ⚠️ 画耗时折线图失败: {e}")
 
-    # --- 图3: 相对压缩时间趋势图 (以 gzip 为基准) ---
-    plt.figure(figsize=(10, 6))
-    
-    base_method = 'gzip' if 'gzip' in methods else methods[0]
-    # 提取基准方法的数据，并确保顺序一致
-    base_df = df[df['Method'] == base_method].sort_values('Size_Num')
-    
-    for m in methods:
-        sub_df = df[df['Method'] == m].sort_values('Size_Num')
+    # ====================================================================
+    # 图表 2：跨数据类型横向对比图
+    # ====================================================================
+    size_datasets = df.groupby('Slice')['Dataset'].nunique()
+    cross_sizes = size_datasets[size_datasets > 1].index
+
+    for sz in cross_sizes:
+        sz_df = df[df['Slice'] == sz]
         
-        # 计算相对倍数，使用 .values 确保按顺序对齐除法
-        relative_times = sub_df['Comp_Time(s)'].values / np.maximum(base_df['Comp_Time(s)'].values, 1e-9)
-        
-        # 直接使用等距的分类标签 sub_df['Slice'] 作为 X 轴
-        plt.plot(sub_df['Slice'], relative_times, marker='s', label=f"{m} (基准为 {base_method})")
-    
-    plt.title(f"相对压缩时间趋势图 (以 {base_method} 耗时为 1.0 倍)")
-    plt.xlabel("文本长度切片")
-    plt.ylabel("相对耗时倍数")
-    plt.yscale('log') 
-    plt.legend()
-    plt.grid(True, linestyle='--', alpha=0.6)
-    plt.savefig(os.path.join(out_dir, "relative_time_trend.png"))
-    plt.close()
+        plt.figure(figsize=(10, 6))
+        sns.barplot(data=sz_df, x='Dataset', y='BPB', hue='Method')
+        plt.title(f'[{sz} 级别] 同体积不同数据类型的压缩率对抗', fontsize=14, pad=15)
+        plt.xlabel('数据集类型', fontsize=12)
+        plt.ylabel('BPB (越低越好)', fontsize=12)
+        plt.grid(axis='y', linestyle='--', alpha=0.6)
+        plt.legend(title='算法', bbox_to_anchor=(1.05, 1), loc='upper left')
+        plt.tight_layout()
+        plt.savefig(os.path.join(out_dir, f'cross_dataset_bpb_{sz}.png'), dpi=300)
+        plt.close()
+        generated_plots += 1
 
-    print(f"[Draw] 3 张图表已生成并保存至 {out_dir} 目录。")
+    print(f"[Draw] 🎨 成功生成了 {generated_plots} 张智能化多维度图表，请在 {out_dir} 目录查看！")
+
+if __name__ == "__main__":
+    # 支持直接运行本脚本来重绘最后一次的 CSV
+    import glob
+    # 动态适配路径，无论是在 tools 还是根目录运行都能找到 CSV
+    csv_search_path = os.path.join("..", "exp1", "outputs", "*.csv") if os.path.basename(os.getcwd()) == "tools" else os.path.join("exp1", "outputs", "*.csv")
+    
+    csv_files = glob.glob(csv_search_path)
+    if csv_files:
+        latest_csv = max(csv_files, key=os.path.getctime)
+        print(f"正在读取最新 CSV 数据: {latest_csv}")
+        out_dir = os.path.dirname(latest_csv)
+        plot_results(latest_csv, out_dir)
+    else:
+        print("未找到任何 CSV 文件，请确保路径正确。")

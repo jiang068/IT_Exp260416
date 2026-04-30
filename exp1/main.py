@@ -57,28 +57,32 @@ def run_experiment_1():
             print(f"\n[跳过] {filename} 大小为 {raw_size} Bytes (超过 1MB 阈值)")
             continue
 
-        base_name = filename[:-4] if filename.endswith(".txt") else filename
-        # 【关键修复】：从 "enwik8_1KB" 中提取出纯净的 "1KB"，以兼容画图脚本
-        slice_name = base_name.split('_')[-1] if '_' in base_name else base_name
+        # =======================================================
+        # 核心修正：安全拆解文件名，杜绝物理文件互相覆盖
+        # =======================================================
+        name_without_ext = os.path.splitext(filename)[0]
+        # 提取纯粹的体积标度 (如 10KB)，专供画图脚本识别
+        slice_scale = name_without_ext.split('_')[-1] if '_' in name_without_ext else name_without_ext
         
-        print(f"\n{'-'*15} 测试切片: {slice_name} ({raw_size} Bytes) {'-'*15}")
+        # 终端清楚打印原始完整文件名
+        print(f"\n{'-'*15} 测试切片: {filename} ({raw_size} Bytes) {'-'*15}")
         
-        # 一次性读取原始二进制数据，用于后续算法通用
+        # 一次性读取原始二进制数据
         with open(raw_path, 'rb') as f:
             raw_data = f.read()
 
-        # 3. 遍历每一种传统压缩算法 (Zip, BZ2, LZMA 等)
+        # 3. 遍历每一种传统压缩算法
         for method_name, (comp_fn, decomp_fn) in TRADITIONAL_COMPRESSORS.items():
             
-            comp_path = os.path.join(temp_dir, f"{base_name}_{method_name}.bin")
-            decomp_path = os.path.join(temp_dir, f"{base_name}_{method_name}.dec.txt")
+            # 物理文件命名：挂载完整的 filename，如 cp_10KB.html_gzip.bin 
+            comp_path = os.path.join(temp_dir, f"{filename}_{method_name}.bin")
+            decomp_path = os.path.join(temp_dir, f"{filename}_{method_name}.dec")
             
             # === 压缩阶段 ===
             start_t = time.perf_counter()
             comp_data = comp_fn(raw_data)
             comp_time = time.perf_counter() - start_t
             
-            # 将压缩后的二进制流落盘保存
             with open(comp_path, 'wb') as f:
                 f.write(comp_data)
                 
@@ -89,14 +93,12 @@ def run_experiment_1():
             decomp_data = decomp_fn(comp_data)
             decomp_time = time.perf_counter() - start_t
             
-            # 将解压后的数据落盘保存 (因为原本就是从二进制读的，直接以二进制写回，彻底避开 CRLF 问题)
             with open(decomp_path, 'wb') as f:
                 f.write(decomp_data)
 
             # === 无损校验 ===
             is_lossless = (raw_data == decomp_data)
 
-            # === 计算指标 ===
             bpb = (comp_size * 8) / raw_size if raw_size > 0 else 0
             comp_throughput = (raw_size / 1024 / 1024) / comp_time if comp_time > 0 else 0
             decomp_throughput = (raw_size / 1024 / 1024) / decomp_time if decomp_time > 0 else 0
@@ -106,7 +108,8 @@ def run_experiment_1():
             # === 写入日志结构 ===
             logger.results.append({
                 "Method": method_name, 
-                "Slice": slice_name,
+                "File": filename,      # 记录真实的物理文件名
+                "Slice": slice_scale,  # 维持画图脚本需要的标度
                 "Raw_Size(B)": raw_size,
                 "Comp_Size(B)": comp_size, 
                 "BPB": bpb, 
@@ -119,7 +122,6 @@ def run_experiment_1():
 
     # 4. 所有测试结束，保存 CSV 并绘图
     if logger.results:
-        # 加上时间戳
         timestamp = time.strftime("%Y%m%d_%H%M%S")
         csv_name = f"legency_results_{timestamp}.csv"
         
@@ -130,7 +132,7 @@ def run_experiment_1():
         try:
             plot_results(csv_path=csv_full_path, out_dir=out_dir)
         except Exception as e:
-            print(f"[警告] 画图步骤出现异常，但数据已成功保存。原因: {e}")
+            print(f"[警告] 画图步骤出现异常，原因: {e}")
 
         print("\n" + "="*60)
         print("实验一：传统算法压缩 批量执行完毕！")
