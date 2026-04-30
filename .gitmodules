@@ -4,3 +4,6 @@
 [submodule "exp2/FineZip/FineZip"]
 	path = exp2/FineZip/FineZip
 	url = https://github.com/fazalmittu/FineZip.git
+[submodule "exp2/llmzip/LLMzip"]
+	path = exp2/llmzip/LLMzip
+	url = https://github.com/vcskaushik/LLMzip.git
